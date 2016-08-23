@@ -165,6 +165,8 @@ static inline uint32_t mask_for_type_check(uint32_t type) {
 static int find_adjusted_tmp_var(const zend_op_array *op_array, uint32_t build_flags, zend_op *opline, uint32_t var_num, zend_long *adjustment) /* {{{ */
 {
 	zend_op *op = opline;
+	zval *zv;
+
 	while (op != op_array->opcodes) {
 		op--;
 		if (op->result_type != IS_TMP_VAR || op->result.var != var_num) {
@@ -182,25 +184,28 @@ static int find_adjusted_tmp_var(const zend_op_array *op_array, uint32_t build_f
 				return EX_VAR_TO_NUM(op->op1.var);
 			}
 		} else if (op->opcode == ZEND_ADD) {
-			if (op->op1_type == IS_CV &&
-				op->op2_type == IS_CONST &&
-				Z_TYPE_P(CRT_CONSTANT(op->op2)) == IS_LONG &&
-				Z_LVAL_P(CRT_CONSTANT(op->op2)) != ZEND_LONG_MIN) {
-				*adjustment = -Z_LVAL_P(CRT_CONSTANT(op->op2));
-				return EX_VAR_TO_NUM(op->op1.var);
-			} else if (op->op2_type == IS_CV &&
-					   op->op1_type == IS_CONST &&
-					   Z_TYPE_P(CRT_CONSTANT(op->op1)) == IS_LONG &&
-					   Z_LVAL_P(CRT_CONSTANT(op->op1)) != ZEND_LONG_MIN) {
-				*adjustment = -Z_LVAL_P(CRT_CONSTANT(op->op1));
-				return EX_VAR_TO_NUM(op->op2.var);
+			if (op->op1_type == IS_CV && op->op2_type == IS_CONST) {
+				zv = CRT_CONSTANT(op->op2);
+				if (Z_TYPE_P(zv) == IS_LONG
+				 && Z_LVAL_P(zv) != ZEND_LONG_MIN) {
+					*adjustment = -Z_LVAL_P(zv);
+					return EX_VAR_TO_NUM(op->op1.var);
+				}
+			} else if (op->op2_type == IS_CV && op->op1_type == IS_CONST) {
+				zv = CRT_CONSTANT(op->op2);
+				if (Z_TYPE_P(zv) == IS_LONG
+				 && Z_LVAL_P(zv) != ZEND_LONG_MIN) {
+					*adjustment = -Z_LVAL_P(zv);
+					return EX_VAR_TO_NUM(op->op2.var);
+				}
 			}
 		} else if (op->opcode == ZEND_SUB) {
-			if (op->op1_type == IS_CV &&
-				op->op2_type == IS_CONST &&
-				Z_TYPE_P(CRT_CONSTANT(op->op2)) == IS_LONG) {
-				*adjustment = Z_LVAL_P(CRT_CONSTANT(op->op2));
-				return EX_VAR_TO_NUM(op->op1.var);
+			if (op->op1_type == IS_CV && op->op2_type == IS_CONST) {
+				zv = CRT_CONSTANT(op->op2);
+				if (Z_TYPE_P(zv) == IS_LONG) {
+					*adjustment = Z_LVAL_P(zv);
+					return EX_VAR_TO_NUM(op->op1.var);
+				}
 			}
 		}
 		break;
@@ -289,15 +294,18 @@ static void place_essa_pis(
 				}
 			} else if (var1 >= 0 && var2 < 0) {
 				zend_long add_val2 = 0;
-				if ((opline-1)->op2_type == IS_CONST &&
-				    Z_TYPE_P(CRT_CONSTANT((opline-1)->op2)) == IS_LONG) {
-					add_val2 = Z_LVAL_P(CRT_CONSTANT((opline-1)->op2));
-				} else if ((opline-1)->op2_type == IS_CONST &&
-				    Z_TYPE_P(CRT_CONSTANT((opline-1)->op2)) == IS_FALSE) {
-					add_val2 = 0;
-				} else if ((opline-1)->op2_type == IS_CONST &&
-				    Z_TYPE_P(CRT_CONSTANT((opline-1)->op2)) == IS_TRUE) {
-					add_val2 = 1;
+				if ((opline-1)->op2_type == IS_CONST) {
+					zval *zv = CRT_CONSTANT((opline-1)->op2);
+
+					if (Z_TYPE_P(zv) == IS_LONG) {
+						add_val2 = Z_LVAL_P(zv);
+					} else if (Z_TYPE_P(zv) == IS_FALSE) {
+						add_val2 = 0;
+					} else if (Z_TYPE_P(zv) == IS_TRUE) {
+						add_val2 = 1;
+					} else {
+						var1 = -1;
+					}
 				} else {
 					var1 = -1;
 				}
@@ -308,15 +316,17 @@ static void place_essa_pis(
 				}
 			} else if (var1 < 0 && var2 >= 0) {
 				zend_long add_val1 = 0;
-				if ((opline-1)->op1_type == IS_CONST &&
-				    Z_TYPE_P(CRT_CONSTANT((opline-1)->op1)) == IS_LONG) {
-					add_val1 = Z_LVAL_P(CRT_CONSTANT((opline-1)->op1));
-				} else if ((opline-1)->op1_type == IS_CONST &&
-				    Z_TYPE_P(CRT_CONSTANT((opline-1)->op1)) == IS_FALSE) {
-					add_val1 = 0;
-				} else if ((opline-1)->op1_type == IS_CONST &&
-				    Z_TYPE_P(CRT_CONSTANT((opline-1)->op1)) == IS_TRUE) {
-					add_val1 = 1;
+				if ((opline-1)->op1_type == IS_CONST) {
+					zval *zv = CRT_CONSTANT((opline-1)->op1);
+					if (Z_TYPE_P(zv) == IS_LONG) {
+						add_val1 = Z_LVAL_P(CRT_CONSTANT((opline-1)->op1));
+					} else if (Z_TYPE_P(zv) == IS_FALSE) {
+						add_val1 = 0;
+					} else if (Z_TYPE_P(zv) == IS_TRUE) {
+						add_val1 = 1;
+					} else {
+						var2 = -1;
+					}
 				} else {
 					var2 = -1;
 				}
@@ -440,9 +450,8 @@ static void place_essa_pis(
 			if ((pi = add_pi(arena, op_array, dfg, ssa, j, bt, var))) {
 				pi_type_mask(pi, mask_for_type_check(type));
 			}
-			if (type != IS_OBJECT && type != IS_RESOURCE) {
-				/* is_object() and is_resource() may return false, even though the value is
-				 * an object/resource. */
+			if (type != IS_RESOURCE) {
+				/* is_resource() may return false for closed resources */
 				if ((pi = add_pi(arena, op_array, dfg, ssa, j, bf, var))) {
 					pi_not_type_mask(pi, mask_for_type_check(type));
 				}
@@ -491,7 +500,7 @@ static void place_essa_pis(
 				   (opline-1)->op2_type == IS_CONST) {
 			int var = EX_VAR_TO_NUM((opline-1)->op1.var);
 			zend_string *lcname = Z_STR_P(CRT_CONSTANT((opline-1)->op2) + 1);
-			zend_class_entry *ce = zend_hash_find_ptr(&script->class_table, lcname);
+			zend_class_entry *ce = script ? zend_hash_find_ptr(&script->class_table, lcname) : NULL;
 			if (!ce) {
 				ce = zend_hash_find_ptr(CG(class_table), lcname);
 				if (!ce || ce->type != ZEND_INTERNAL_CLASS) {

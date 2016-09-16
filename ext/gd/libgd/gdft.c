@@ -626,6 +626,7 @@ static char * gdft_draw_bitmap (gdCache_head_t *tc_cache, gdImage * im, int fg, 
 {
 	unsigned char *pixel = NULL;
 	int *tpixel = NULL;
+	int opixel;
 	int x, y, row, col, pc, pcr;
 
 	tweencolor_t *tc_elem;
@@ -658,6 +659,8 @@ static char * gdft_draw_bitmap (gdCache_head_t *tc_cache, gdImage * im, int fg, 
 				} else {
 					return "Unsupported ft_pixel_mode";
 				}
+				if (level == 0)  /* if background */
+					continue;
 				if ((fg >= 0) && (im->trueColor)) {
 					/* Consider alpha in the foreground color itself to be an
 					 * upper bound on how opaque things get, when truecolor is
@@ -681,7 +684,13 @@ static char * gdft_draw_bitmap (gdCache_head_t *tc_cache, gdImage * im, int fg, 
 					}
 				} else {
 					if (im->alphaBlendingFlag) {
-						*tpixel = gdAlphaBlend(*tpixel, (level << 24) + (fg & 0xFFFFFF));
+						opixel = *tpixel;
+						if (gdTrueColorGetAlpha(opixel) != gdAlphaTransparent) {
+							*tpixel = gdAlphaBlend (opixel,
+							                        (level << 24) + (fg & 0xFFFFFF));
+						} else {
+							*tpixel = (level << 24) + (fg & 0xFFFFFF);
+						}
 					} else {
 						*tpixel = (level << 24) + (fg & 0xFFFFFF);
 					}

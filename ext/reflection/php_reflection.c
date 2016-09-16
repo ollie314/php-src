@@ -1555,17 +1555,11 @@ ZEND_METHOD(reflection, export)
 	int result;
 	zend_bool return_output = 0;
 
-#ifndef FAST_ZPP
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "O|b", &object, reflector_ptr, &return_output) == FAILURE) {
-		return;
-	}
-#else
 	ZEND_PARSE_PARAMETERS_START(1, 2)
 		Z_PARAM_OBJECT_OF_CLASS(object, reflector_ptr)
 		Z_PARAM_OPTIONAL
 		Z_PARAM_BOOL(return_output)
 	ZEND_PARSE_PARAMETERS_END();
-#endif
 
 	/* Invoke the __toString() method */
 	ZVAL_STRINGL(&fname, "__tostring", sizeof("__tostring") - 1);
@@ -3028,13 +3022,23 @@ ZEND_METHOD(reflection_type, __toString)
 {
 	reflection_object *intern;
 	type_reference *param;
+	zend_string *str;
 
 	if (zend_parse_parameters_none() == FAILURE) {
 		return;
 	}
 	GET_REFLECTION_OBJECT_PTR(param);
 	
-	RETURN_STR(reflection_type_name(param));
+	str = reflection_type_name(param);
+	
+	if (param->arg_info->allow_null) {
+		size_t orig_len = ZSTR_LEN(str);
+		str = zend_string_extend(str, orig_len + 1, 0);
+		memmove(ZSTR_VAL(str) + 1, ZSTR_VAL(str), orig_len + 1);
+		ZSTR_VAL(str)[0] = '?';
+	}
+	
+	RETURN_STR(str);
 }
 /* }}} */
 

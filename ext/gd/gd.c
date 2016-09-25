@@ -685,6 +685,18 @@ ZEND_BEGIN_ARG_INFO(arginfo_imagesy, 0)
 	ZEND_ARG_INFO(0, im)
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_INFO(arginfo_imagesetclip, 0)
+	ZEND_ARG_INFO(0, im)
+	ZEND_ARG_INFO(0, x1)
+	ZEND_ARG_INFO(0, y1)
+	ZEND_ARG_INFO(0, x2)
+	ZEND_ARG_INFO(0, y2)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO(arginfo_imagegetclip, 0)
+	ZEND_ARG_INFO(0, im)
+ZEND_END_ARG_INFO()
+
 #ifdef ENABLE_GD_TTF
 #if HAVE_LIBFREETYPE
 ZEND_BEGIN_ARG_INFO_EX(arginfo_imageftbbox, 0, 0, 4)
@@ -936,6 +948,8 @@ const zend_function_entry gd_functions[] = {
 	PHP_FE(imagestringup,							arginfo_imagestringup)
 	PHP_FE(imagesx,									arginfo_imagesx)
 	PHP_FE(imagesy,									arginfo_imagesy)
+	PHP_FE(imagesetclip,							arginfo_imagesetclip)
+	PHP_FE(imagegetclip,							arginfo_imagegetclip)
 	PHP_FE(imagedashedline,							arginfo_imagedashedline)
 
 #ifdef ENABLE_GD_TTF
@@ -2528,11 +2542,11 @@ static void _php_image_output(INTERNAL_FUNCTION_PARAMETERS, int image_type, char
 
 	if (argc > 1) {
 		fn = file;
-		if (argc == 3) {
+		if (argc >= 3) {
 			q = quality;
-		}
-		if (argc == 4) {
-			t = type;
+			if (argc == 4) {
+				t = type;
+			}
 		}
 	}
 
@@ -2565,9 +2579,6 @@ static void _php_image_output(INTERNAL_FUNCTION_PARAMETERS, int image_type, char
 				(*func_p)(im, i, fp);
 				break;
 			case PHP_GDIMG_TYPE_GD:
-				if (im->trueColor){
-					gdImageTrueColorToPalette(im,1,256);
-				}
 				(*func_p)(im, fp);
 				break;
 			case PHP_GDIMG_TYPE_GD2:
@@ -2619,9 +2630,6 @@ static void _php_image_output(INTERNAL_FUNCTION_PARAMETERS, int image_type, char
 				(*func_p)(im, q, tmp);
 				break;
 			case PHP_GDIMG_TYPE_GD:
-				if (im->trueColor) {
-					gdImageTrueColorToPalette(im,1,256);
-				}
 				(*func_p)(im, tmp);
 				break;
 			case PHP_GDIMG_TYPE_GD2:
@@ -3796,6 +3804,53 @@ PHP_FUNCTION(imagesy)
 }
 /* }}} */
 
+/* {{{ proto bool imagesetclip(resource im, int x1, int y1, int x2, int y2)
+   Set the clipping rectangle. */
+PHP_FUNCTION(imagesetclip)
+{
+	zval *im_zval;
+	gdImagePtr im;
+	zend_long x1, y1, x2, y2;
+	
+	if (zend_parse_parameters(ZEND_NUM_ARGS(), "rllll", &im_zval, &x1, &y1, &x2, &y2) == FAILURE) {
+		return;
+	}
+
+	if ((im = (gdImagePtr)zend_fetch_resource(Z_RES_P(im_zval), "Image", le_gd)) == NULL) {
+		RETURN_FALSE;
+	}
+
+	gdImageSetClip(im, x1, y1, x2, y2);
+	RETURN_TRUE;
+}
+/* }}} */
+
+/* {{{ proto array imagegetclip(resource im)
+   Get the clipping rectangle. */
+PHP_FUNCTION(imagegetclip)
+{
+	zval *im_zval;
+	gdImagePtr im;
+	int x1, y1, x2, y2;
+	
+	if (zend_parse_parameters(ZEND_NUM_ARGS(), "r", &im_zval) == FAILURE) {
+		return;
+	}
+
+	if ((im = (gdImagePtr)zend_fetch_resource(Z_RES_P(im_zval), "Image", le_gd)) == NULL) {
+		RETURN_FALSE;
+	}
+
+	gdImageGetClip(im, &x1, &y1, &x2, &y2);
+	
+	array_init(return_value);
+	add_next_index_long(return_value, x1);
+	add_next_index_long(return_value, y1);
+	add_next_index_long(return_value, x2);
+	add_next_index_long(return_value, y2);
+}
+/* }}} */
+
 #ifdef ENABLE_GD_TTF
 #define TTFTEXT_DRAW 0
 #define TTFTEXT_BBOX 1
@@ -3843,7 +3898,7 @@ static void php_imagettftext_common(INTERNAL_FUNCTION_PARAMETERS, int mode, int 
 {
 	zval *IM, *EXT = NULL;
 	gdImagePtr im=NULL;
-	zend_long col = -1, x = -1, y = -1;
+	zend_long col = -1, x = 0, y = 0;
 	size_t str_len, fontname_len;
 	int i, brect[8];
 	double ptsize, angle;

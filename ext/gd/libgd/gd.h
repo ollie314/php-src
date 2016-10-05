@@ -92,6 +92,7 @@ void php_gd_error(const char *format, ...);
 #define gdEffectAlphaBlend 1
 #define gdEffectNormal 2
 #define gdEffectOverlay 3
+#define gdEffectMultiply 4
 
 #define GD_TRUE 1
 #define GD_FALSE 0
@@ -104,6 +105,8 @@ void php_gd_error(const char *format, ...);
 	The resulting color is opaque. */
 
 int gdAlphaBlend(int dest, int src);
+int gdLayerOverlay(int dst, int src);
+int gdLayerMultiply(int dest, int src);
 
 /**
  * Group: Transform
@@ -222,8 +225,6 @@ typedef struct gdImageStruct {
 		To do that, build your image as a truecolor image,
 		then quantize down to 8 bits. */
 	int alphaBlendingFlag;
-	/* Should antialias functions be used */
-	int antialias;
 	/* Should the alpha channel of the image be saved? This affects
 		PNG at the moment; other future formats may also
 		have that capability. JPEG doesn't. */
@@ -553,7 +554,7 @@ void gdImageColorDeallocate(gdImagePtr im, int color);
 
 gdImagePtr gdImageCreatePaletteFromTrueColor (gdImagePtr im, int ditherFlag, int colorsWanted);
 
-void gdImageTrueColorToPalette(gdImagePtr im, int ditherFlag, int colorsWanted);
+int gdImageTrueColorToPalette(gdImagePtr im, int ditherFlag, int colorsWanted);
 int gdImagePaletteToTrueColor(gdImagePtr src);
 
 /* An attempt at getting the results of gdImageTrueColorToPalette

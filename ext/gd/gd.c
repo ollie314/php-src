@@ -786,12 +786,10 @@ ZEND_BEGIN_ARG_INFO(arginfo_imageflip, 0)
 	ZEND_ARG_INFO(0, mode)
 ZEND_END_ARG_INFO()
 
-#ifdef HAVE_GD_BUNDLED
 ZEND_BEGIN_ARG_INFO(arginfo_imageantialias, 0)
 	ZEND_ARG_INFO(0, im)
 	ZEND_ARG_INFO(0, on)
 ZEND_END_ARG_INFO()
-#endif
 
 ZEND_BEGIN_ARG_INFO(arginfo_imagecrop, 0)
 	ZEND_ARG_INFO(0, im)
@@ -884,9 +882,7 @@ const zend_function_entry gd_functions[] = {
 	PHP_FE(imagerotate,     						arginfo_imagerotate)
 	PHP_FE(imageflip,								arginfo_imageflip)
 
-#ifdef HAVE_GD_BUNDLED
 	PHP_FE(imageantialias,							arginfo_imageantialias)
-#endif
 	PHP_FE(imagecrop,								arginfo_imagecrop)
 	PHP_FE(imagecropauto,							arginfo_imagecropauto)
 	PHP_FE(imagescale,								arginfo_imagescale)
@@ -1102,6 +1098,9 @@ PHP_MINIT_FUNCTION(gd)
 	REGISTER_LONG_CONSTANT("IMG_EFFECT_ALPHABLEND", gdEffectAlphaBlend, CONST_CS | CONST_PERSISTENT);
 	REGISTER_LONG_CONSTANT("IMG_EFFECT_NORMAL", gdEffectNormal, CONST_CS | CONST_PERSISTENT);
 	REGISTER_LONG_CONSTANT("IMG_EFFECT_OVERLAY", gdEffectOverlay, CONST_CS | CONST_PERSISTENT);
+#ifdef gdEffectMultiply
+	REGISTER_LONG_CONSTANT("IMG_EFFECT_MULTIPLY", gdEffectMultiply, CONST_CS | CONST_PERSISTENT);
+#endif
 
 	REGISTER_LONG_CONSTANT("IMG_CROP_DEFAULT", GD_CROP_DEFAULT, CONST_CS | CONST_PERSISTENT);
 	REGISTER_LONG_CONSTANT("IMG_CROP_TRANSPARENT", GD_CROP_TRANSPARENT, CONST_CS | CONST_PERSISTENT);
@@ -1555,9 +1554,12 @@ PHP_FUNCTION(imagetruecolortopalette)
 		php_error_docref(NULL, E_WARNING, "Number of colors has to be greater than zero and no more than %d", INT_MAX);
 		RETURN_FALSE;
 	}
-	gdImageTrueColorToPalette(im, dither, (int)ncolors);
-
-	RETURN_TRUE;
+	if (gdImageTrueColorToPalette(im, dither, (int)ncolors)) {
+		RETURN_TRUE;
+	} else {
+		php_error_docref(NULL, E_WARNING, "Couldn't convert to palette");
+		RETURN_FALSE;
+	}
 }
 /* }}} */
 
@@ -3111,14 +3113,11 @@ PHP_FUNCTION(imageline)
 		RETURN_FALSE;
 	}
 
-#ifdef HAVE_GD_BUNDLED
-	if (im->antialias) {
-		gdImageAALine(im, x1, y1, x2, y2, col);
-	} else
-#endif
-	{
-		gdImageLine(im, x1, y1, x2, y2, col);
+	if (im->AA) {
+		gdImageSetAntiAliased(im, col);
+		col = gdAntiAliased;
 	}
+	gdImageLine(im, x1, y1, x2, y2, col);
 	RETURN_TRUE;
 }
 /* }}} */
@@ -3398,6 +3397,10 @@ static void php_imagepolygon(INTERNAL_FUNCTION_PARAMETERS, int filled)
 		}
 	}
 
+	if (im->AA) {
+		gdImageSetAntiAliased(im, col);
+		col = gdAntiAliased;
+	}
 	if (filled) {
 		gdImageFilledPolygon(im, points, npoints, col);
 	} else {
@@ -4039,7 +4042,10 @@ static void _php_image_bw_convert(gdImagePtr im_org, gdIOCtx *out, int threshold
 	}
 
 	if (im_org->trueColor) {
-		gdImageTrueColorToPalette(im_org, 1, 256);
+		if (!gdImageTrueColorToPalette(im_org, 1, 256)) {
+			php_error_docref(NULL, E_WARNING, "Unable to convert to palette");
+			return;
+		}
 	}
 
 	for (y = 0; y < dest_height; y++) {
@@ -4601,7 +4607,6 @@ PHP_FUNCTION(imageflip)
 }
 /* }}} */
 
-#ifdef HAVE_GD_BUNDLED
 /* {{{ proto bool imageantialias(resource im, bool on)
    Should antialiased functions used or not*/
 PHP_FUNCTION(imageantialias)
@@ -4617,11 +4622,10 @@ PHP_FUNCTION(imageantialias)
 	if ((im = (gdImagePtr)zend_fetch_resource(Z_RES_P(IM), "Image", le_gd)) == NULL) {
 		RETURN_FALSE;
 	}
-	gdImageAntialias(im, alias);
+	gdImageSetAntiAliased(im, 0);
 	RETURN_TRUE;
 }
 /* }}} */
-#endif
 
 /* {{{ proto void imagecrop(resource im, array rect)
    Crop an image using the given coordinates and size, x, y, width and height. */

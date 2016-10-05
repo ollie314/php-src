@@ -93,7 +93,6 @@ extern int gdSinT[];
 
 static void gdImageBrushApply(gdImagePtr im, int x, int y);
 static void gdImageTileApply(gdImagePtr im, int x, int y);
-static int gdLayerOverlay(int dst, int src);
 static int gdAlphaOverlayColor(int src, int dst, int max);
 int gdImageGetTrueColorPixel(gdImagePtr im, int x, int y);
 
@@ -756,13 +755,14 @@ void gdImageSetPixel (gdImagePtr im, int x, int y, int color)
 							im->tpixels[y][x] = color;
 							break;
 						case gdEffectAlphaBlend:
-							im->tpixels[y][x] = gdAlphaBlend(im->tpixels[y][x], color);
-							break;
 						case gdEffectNormal:
 							im->tpixels[y][x] = gdAlphaBlend(im->tpixels[y][x], color);
 							break;
 						case gdEffectOverlay :
 							im->tpixels[y][x] = gdLayerOverlay(im->tpixels[y][x], color);
+							break;
+						case gdEffectMultiply :
+							im->tpixels[y][x] = gdLayerMultiply(im->tpixels[y][x], color);
 							break;
 					}
 				} else {
@@ -2608,24 +2608,17 @@ void gdImagePolygon (gdImagePtr im, gdPointPtr p, int n, int c)
 {
 	int i;
 	int lx, ly;
-	typedef void (*image_line)(gdImagePtr im, int x1, int y1, int x2, int y2, int color);
-	image_line draw_line;
 
 	if (n <= 0) {
 		return;
 	}
 
-	if ( im->antialias) {
-		draw_line = gdImageAALine;
-	} else {
-		draw_line = gdImageLine;
-	}
 	lx = p->x;
 	ly = p->y;
-	draw_line(im, lx, ly, p[n - 1].x, p[n - 1].y, c);
+	gdImageLine(im, lx, ly, p[n - 1].x, p[n - 1].y, c);
 	for (i = 1; i < n; i++) {
 		p++;
-		draw_line(im, lx, ly, p->x, p->y, c);
+		gdImageLine(im, lx, ly, p->x, p->y, c);
 		lx = p->x;
 		ly = p->y;
 	}
@@ -2953,19 +2946,12 @@ void gdImageAlphaBlending (gdImagePtr im, int alphaBlendingArg)
 	im->alphaBlendingFlag = alphaBlendingArg;
 }
 
-void gdImageAntialias (gdImagePtr im, int antialias)
-{
-	if (im->trueColor){
-		im->antialias = antialias;
-	}
-}
-
 void gdImageSaveAlpha (gdImagePtr im, int saveAlphaArg)
 {
 	im->saveAlphaFlag = saveAlphaArg;
 }
 
-static int gdLayerOverlay (int dst, int src)
+int gdLayerOverlay (int dst, int src)
 {
 	int a1, a2;
 	a1 = gdAlphaMax - gdTrueColorGetAlpha(dst);
@@ -2996,6 +2982,28 @@ static int gdAlphaOverlayColor (int src, int dst, int max )
 		/* in the "dark" zone */
 		return dst * src / max;
 	}
+}
+
+int gdLayerMultiply (int dst, int src)
+{
+	int a1, a2, r1, r2, g1, g2, b1, b2;
+	a1 = gdAlphaMax - gdTrueColorGetAlpha(src);
+	a2 = gdAlphaMax - gdTrueColorGetAlpha(dst);
+
+	r1 = gdRedMax - (a1 * (gdRedMax - gdTrueColorGetRed(src))) / gdAlphaMax;
+	r2 = gdRedMax - (a2 * (gdRedMax - gdTrueColorGetRed(dst))) / gdAlphaMax;
+	g1 = gdGreenMax - (a1 * (gdGreenMax - gdTrueColorGetGreen(src))) / gdAlphaMax;
+	g2 = gdGreenMax - (a2 * (gdGreenMax - gdTrueColorGetGreen(dst))) / gdAlphaMax;
+	b1 = gdBlueMax - (a1 * (gdBlueMax - gdTrueColorGetBlue(src))) / gdAlphaMax;
+	b2 = gdBlueMax - (a2 * (gdBlueMax - gdTrueColorGetBlue(dst))) / gdAlphaMax ;
+
+	a1 = gdAlphaMax - a1;
+	a2 = gdAlphaMax - a2;
+	return ( ((a1*a2/gdAlphaMax) << 24) +
+			 ((r1*r2/gdRedMax) << 16) +
+			 ((g1*g2/gdGreenMax) << 8) +
+			 ((b1*b2/gdBlueMax))
+		);
 }
 
 void gdImageSetClip (gdImagePtr im, int x1, int y1, int x2, int y2)

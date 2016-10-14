@@ -1032,8 +1032,10 @@ void php_gd_error_method(int type, const char *format, va_list args)
 {
 
 	switch (type) {
+#ifndef PHP_WIN32
 		case GD_DEBUG:
 		case GD_INFO:
+#endif
 		case GD_NOTICE:
 			type = E_NOTICE;
 			break;
@@ -4121,15 +4123,6 @@ static void _php_image_convert(INTERNAL_FUNCTION_PARAMETERS, int image_type )
 	}
 
 	switch (image_type) {
-		case PHP_GDIMG_TYPE_GIF:
-			im_org = gdImageCreateFromGif(org);
-			if (im_org == NULL) {
-				php_error_docref(NULL, E_WARNING, "Unable to open '%s' Not a valid GIF file", fn_dest);
-                fclose(org);
-                fclose(dest);
-				RETURN_FALSE;
-			}
-			break;
 
 #ifdef HAVE_GD_JPG
 		case PHP_GDIMG_TYPE_JPG:
